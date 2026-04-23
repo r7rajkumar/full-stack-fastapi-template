@@ -180,11 +180,21 @@ curl -s -X POST http://localhost:8000/api/v1/agent/ask \
 
 ---
 
+
 ## Deployment Approach
-Build Docker images and push to AWS ECR. Deploy on ECS Fargate or a single EC2 instance.
-Use RDS PostgreSQL 16+ with pgvector extension enabled (available natively on RDS since 2024).
-Place an ALB in front for TLS termination. Store API keys in AWS Secrets Manager.
-No application code changes needed — environment variables only.
+
+**Infrastructure (AWS):**
+- **Container Registry:** Push backend and frontend Docker images to AWS ECR
+- **Compute:** Deploy on ECS Fargate (serverless containers) — no EC2 management needed
+- **Database:** AWS RDS PostgreSQL 18 with pgvector extension enabled via `CREATE EXTENSION vector` — RDS supports pgvector natively since 2023
+- **Load Balancer:** ALB (Application Load Balancer) in front of ECS for TLS termination and routing
+- **Secrets:** `GEMINI_API_KEY`, `SECRET_KEY`, `POSTGRES_PASSWORD` stored in AWS Secrets Manager — injected as environment variables into ECS task definitions at runtime
+- **Networking:** VPC with private subnets for RDS and ECS tasks, public subnet for ALB only
+
+**CI/CD:**
+- GitHub Actions builds and pushes Docker images to ECR on every push to `main`
+- ECS service auto-deploys new task definition when image updates
+
 
 ---
 
