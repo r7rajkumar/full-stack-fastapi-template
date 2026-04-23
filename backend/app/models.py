@@ -1,10 +1,13 @@
 import uuid
 from datetime import datetime, timezone
-
 from pydantic import EmailStr
 from sqlalchemy import DateTime
 from sqlmodel import Field, Relationship, SQLModel
-
+import sqlalchemy as sa
+import enum
+from typing import Optional, List
+from sqlalchemy import Text, Column
+from sqlalchemy import Enum as SAEnum
 
 def get_datetime_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -127,3 +130,150 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# ─────────────────────────────────────────────
+# Insurance Domain Models
+# ─────────────────────────────────────────────
+
+
+class IndustryType(str, enum.Enum):
+    retail = "retail"
+    hospitality = "hospitality"
+    construction = "construction"
+    technology = "technology"
+    healthcare = "healthcare"
+    manufacturing = "manufacturing"
+    professional_services = "professional_services"
+    other = "other"
+
+    class Config:
+        use_enum_values = True
+
+
+class ProductType(str, enum.Enum):
+    public_liability = "public_liability"
+    professional_indemnity = "professional_indemnity"
+    cyber = "cyber"
+    business_interruption = "business_interruption"
+    property = "property"
+    employers_liability = "employers_liability"
+
+    class Config:
+        use_enum_values = True
+
+
+class QuoteStatus(str, enum.Enum):
+    draft = "draft"
+    sent = "sent"
+    accepted = "accepted"
+
+    class Config:
+        use_enum_values = True
+
+
+# ── Client ────────────────────────────────────
+
+
+class ClientBase(SQLModel):
+    name: str = Field(max_length=255)
+    industry: str
+    annual_turnover_nzd: float
+    notes: str | None = Field(default=None, sa_column=Column(Text))
+
+class ClientCreate(ClientBase):
+    pass
+
+
+class ClientUpdate(SQLModel):
+    name: str | None = Field(default=None, max_length=255)
+    industry: IndustryType | None = None
+    annual_turnover_nzd: float | None = None
+    notes: str | None = None
+
+
+class Client(ClientBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    quotes: list["Quote"] = Relationship(back_populates="client", cascade_delete=True)
+
+
+class ClientPublic(ClientBase):
+    id: int
+
+
+class ClientsPublic(SQLModel):
+    data: list[ClientPublic]
+    count: int
+
+
+# ── Policy ────────────────────────────────────
+class PolicyBase(SQLModel):
+    product_type: str
+    insurer: str = Field(max_length=255)
+    sum_insured_nzd: float
+    description: str = Field(sa_column=Column(Text))
+
+
+class PolicyCreate(PolicyBase):
+    pass
+
+
+class PolicyUpdate(SQLModel):
+    product_type: ProductType | None = None
+    insurer: str | None = Field(default=None, max_length=255)
+    sum_insured_nzd: float | None = None
+    description: str | None = None
+
+
+class Policy(PolicyBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    # embedding column added via raw SA Column in migration (pgvector)
+    quotes: list["Quote"] = Relationship(back_populates="policy")
+
+
+class PolicyPublic(PolicyBase):
+    id: int
+
+
+class PolicyWithScore(PolicyPublic):
+    score: float
+
+
+class PoliciesPublic(SQLModel):
+    data: list[PolicyPublic]
+    count: int
+
+
+# ── Quote ─────────────────────────────────────
+
+class QuoteBase(SQLModel):
+    premium_nzd: float
+    status: str = "draft"
+
+class QuoteCreate(QuoteBase):
+    client_id: int
+    policy_id: int
+
+
+class QuoteUpdate(SQLModel):
+    premium_nzd: float | None = None
+    status: QuoteStatus | None = None
+
+
+class Quote(QuoteBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    client_id: int = Field(foreign_key="client.id", ondelete="CASCADE")
+    policy_id: int = Field(foreign_key="policy.id")
+    client: Client | None = Relationship(back_populates="quotes")
+    policy: Policy | None = Relationship(back_populates="quotes")
+
+
+class QuotePublic(QuoteBase):
+    id: int
+    client_id: int
+    policy_id: int
+
+
+class QuotesPublic(SQLModel):
+    data: list[QuotePublic]
+    count: int

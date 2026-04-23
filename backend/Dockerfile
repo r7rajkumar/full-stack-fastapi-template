@@ -41,5 +41,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package app
 
 WORKDIR /app/backend/
-
 CMD ["fastapi", "run", "--workers", "4", "app/main.py"]
